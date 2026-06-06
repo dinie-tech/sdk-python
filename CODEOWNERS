@@ -1,0 +1,14 @@
+# CODEOWNERS — runtime/ <-> generated/ directory boundary (architecture §4.2).
+#
+# /dinie/runtime/   -> hand-written runtime. Human owners — real enforcement.
+#                      Authors: stories 003 (runtime spine) and 004 (domain types).
+# /dinie/generated/ -> EMITTED by sdk-generator (story 007 onwards). Owned by the
+#                      generator bot (@dinie-sdk-bot). CI will run `sdk-generator
+#                      --check` here from V1.1 to ensure humans don't edit the
+#                      generated layer without regenerating.
+#
+# The unidirectional import boundary (generated/ -> runtime/, never the reverse)
+# is the load-bearing invariant; CODEOWNERS makes the ownership split explicit.
+
+/dinie/runtime/    @jaisonerick @dinie-tech/sdk-runtime-owners
+/dinie/generated/  @dinie-sdk-bot

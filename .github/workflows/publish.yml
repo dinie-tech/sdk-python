@@ -1,0 +1,22 @@
+name: Publish
+
+# PyPI publishing is planned for V1.0. This workflow is a stub.
+# When V1.0 ships, wire up Trusted Publishing (OIDC) via pypa/gh-action-pypi-publish.
+# No static credentials — use the GitHub → PyPI OIDC federation pattern.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    name: Publish to PyPI (V1.0 — stub)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Not yet implemented
+        run: |
+          echo "PyPI publishing is deferred to V1.0."
+          echo "See CHANGELOG.md and the V1.0 roadmap."
+          echo "Wire up pypa/gh-action-pypi-publish with OIDC Trusted Publishing when ready."

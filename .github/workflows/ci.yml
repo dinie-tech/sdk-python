@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    name: ruff · mypy · pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: ruff lint
+        run: ruff check dinie/ tests/
+
+      - name: ruff format check
+        run: ruff format --check dinie/ tests/
+
+      # mypy runs on the hand-written package only. The generated layer (dinie/generated/)
+      # is linted after story 007 lands; runtime/ after stories 003/004.
+      - name: mypy strict
+        run: mypy --strict dinie/
+
+      - name: pytest
+        run: pytest tests/
+
+      # Non-gate: live smoke against staging (credentials not yet provisioned).
+      # Skips gracefully when DINIE_CLIENT_ID is absent.
+      - name: smoke (informative)
+        run: python -c "import os; exit(0 if not os.getenv('DINIE_CLIENT_ID') else 0)"
+        continue-on-error: true
+        env:
+          DINIE_CLIENT_ID: ${{ secrets.DINIE_CLIENT_ID }}
+          DINIE_CLIENT_SECRET: ${{ secrets.DINIE_CLIENT_SECRET }}
+          DINIE_BASE_URL: ${{ secrets.DINIE_BASE_URL }}
