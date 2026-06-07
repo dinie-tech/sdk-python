@@ -4,8 +4,9 @@ This package contains the hand-written infrastructure: HTTP client, token
 management, retry logic, pagination, error hierarchy, webhook verification,
 logging, idempotency, and rate-limit tracking.
 
-Public surface (story 003)
---------------------------
+Public surface (story 003 + 004)
+---------------------------------
+Story 003 — transport spine:
 * ``OMIT`` / ``OmitType`` / ``Model`` / ``serialize_request`` — model utilities
 * ``RequestOptions`` — per-call transport overrides
 * ``RateLimit`` / ``RateLimitTracker`` — rate-limit header parsing
@@ -17,6 +18,15 @@ Public surface (story 003)
 * ``TokenManager`` — bearer-token lifecycle (single-flight refresh)
 * ``SyncHttpClient`` / ``BaseClient`` — HTTP transport
 * ``DEFAULT_BASE_URL`` / ``DEFAULT_MAX_RETRIES`` / ``DEFAULT_TIMEOUT`` — defaults
+
+Story 004 — domain layer:
+* ``extract`` — Standard Webhooks v1 verify + dispatch
+* ``WebhookError`` / ``WebhookSignatureError`` / ``WebhookTimestampError``
+  / ``UnknownWebhookEventError`` — webhook exceptions
+* ``EVENT_DESERIALIZERS`` / ``register_event`` — webhook event registry
+* ``SyncCursorPage`` — cursor-paginated results (``has_more``-driven)
+* ``SensitiveDataFilter`` / ``setup_logging`` / ``get_logger`` / ``redact_headers``
+  / ``redact_body`` — logging infrastructure
 """
 
 from dinie.runtime.errors import (
@@ -45,7 +55,21 @@ from dinie.runtime.http import (
     SyncHttpClient,
 )
 from dinie.runtime.idempotency import KEY_PREFIX, generate_key
+from dinie.runtime.logger import (
+    BODY_TRUNCATE_CHARS,
+    LOG_ENV_VAR,
+    REDACTED,
+    SDK_LOGGER_NAME,
+    SENSITIVE_BODY_KEYS,
+    SENSITIVE_HEADERS,
+    SensitiveDataFilter,
+    get_logger,
+    redact_body,
+    redact_headers,
+    setup_logging,
+)
 from dinie.runtime.models import OMIT, Model, OmitType, serialize_request
+from dinie.runtime.paginator import SyncCursorPage
 from dinie.runtime.rate_limit import RateLimit, RateLimitTracker
 from dinie.runtime.request_options import RequestOptions
 from dinie.runtime.retry import (
@@ -58,6 +82,19 @@ from dinie.runtime.retry import (
     should_retry,
 )
 from dinie.runtime.token_manager import EXPIRY_BUFFER_SECONDS, TOKEN_PATH, TokenManager
+from dinie.runtime.webhooks import (
+    DEFAULT_TOLERANCE_SECONDS,
+    EVENT_DESERIALIZERS,
+    WEBHOOK_ID_HEADER,
+    WEBHOOK_SIGNATURE_HEADER,
+    WEBHOOK_TIMESTAMP_HEADER,
+    UnknownWebhookEventError,
+    WebhookError,
+    WebhookSignatureError,
+    WebhookTimestampError,
+    extract,
+    register_event,
+)
 
 __all__ = [
     # models
@@ -108,4 +145,30 @@ __all__ = [
     "IDEMPOTENT_METHODS",
     "BaseClient",
     "SyncHttpClient",
+    # webhooks (story 004)
+    "DEFAULT_TOLERANCE_SECONDS",
+    "EVENT_DESERIALIZERS",
+    "WEBHOOK_ID_HEADER",
+    "WEBHOOK_SIGNATURE_HEADER",
+    "WEBHOOK_TIMESTAMP_HEADER",
+    "UnknownWebhookEventError",
+    "WebhookError",
+    "WebhookSignatureError",
+    "WebhookTimestampError",
+    "extract",
+    "register_event",
+    # paginator (story 004)
+    "SyncCursorPage",
+    # logger (story 004)
+    "BODY_TRUNCATE_CHARS",
+    "LOG_ENV_VAR",
+    "REDACTED",
+    "SDK_LOGGER_NAME",
+    "SENSITIVE_BODY_KEYS",
+    "SENSITIVE_HEADERS",
+    "SensitiveDataFilter",
+    "get_logger",
+    "redact_body",
+    "redact_headers",
+    "setup_logging",
 ]
