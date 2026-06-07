@@ -2,8 +2,15 @@
 
 This module provides:
 
-* ``BaseClient[_HttpxClientT]`` — generic base (D3).
+* ``BaseClient[_HttpxClientT]`` — generic base (D3).  Carries all business
+  logic: ``request()`` retry loop, ``_build_headers()``, idempotency injection,
+  401 one-shot re-auth.  The only abstract method is ``_raw_request()``.
 * ``SyncHttpClient`` — concrete sync implementation (``httpx.Client``).
+  Overrides **only** ``_raw_request()`` (~12 lines of I/O).
+
+The split is intentional (architecture D3): adding ``AsyncHttpClient`` later
+means overriding only ``_raw_request()`` — the retry loop, headers, and
+idempotency are inherited unchanged.
 
 Responsibilities
 ----------------
@@ -19,7 +26,8 @@ Responsibilities
 
 Non-goals (for v1)
 ------------------
-* Async support (sync-only, D3; the split is mechanical).
+* Async support (sync-only, D3; the split is mechanical — only ``_raw_request``
+  changes).
 * Cancellation tokens (D8: ``httpx.Timeout`` per-request covers v1).
 """
 
@@ -57,7 +65,9 @@ IDEMPOTENT_METHODS = frozenset({"POST", "PATCH", "PUT", "DELETE"})
 class BaseClient(Generic[_HttpxClientT]):
     """Generic transport base shared by sync (and future async) clients.
 
-    Sub-classes own the ``_http`` field and override ``_raw_request``.
+    **D3 contract:** this class carries all *pure* business logic — the retry
+    loop, header assembly, idempotency injection, and 401 one-shot re-auth.
+    Sub-classes implement **only** ``_raw_request()`` (the I/O leaf).
 
     Args:
         base_url: API base URL (default: production).
@@ -81,6 +91,10 @@ class BaseClient(Generic[_HttpxClientT]):
         self._http = http_client
         self._token_manager = token_manager
         self._rate_limit = RateLimitTracker()
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     @property
     def rate_limit(self) -> RateLimitTracker:
@@ -108,24 +122,6 @@ class BaseClient(Generic[_HttpxClientT]):
             token_manager=self._token_manager,
         )
 
-
-class SyncHttpClient(BaseClient[httpx.Client]):
-    """Synchronous HTTP client built on ``httpx.Client``.
-
-    Instantiated by the generated ``Dinie()`` constructor (story 007). Users
-    never construct this directly.
-
-    The retry loop:
-
-    1. Issue the request.
-    2. If 401 → invalidate token → retry ONCE (no backoff, no counter increment).
-    3. If in ``RETRYABLE_STATUS`` and attempts remain → sleep → retry.
-    4. Otherwise → ``from_response`` → raise.
-
-    ``X-Dinie-Retry-Count: N`` is injected on every retry (N ≥ 1).
-    The idempotency key is minted once before the loop so retries reuse it.
-    """
-
     def request(
         self,
         method: str,
@@ -137,18 +133,25 @@ class SyncHttpClient(BaseClient[httpx.Client]):
     ) -> Any:
         """Execute an API call with retry / auth / idempotency handling.
 
+        **All** retry logic, header merging, and 401 re-auth live here so that
+        sub-classes only need to override ``_raw_request()`` (D3).
+
         Args:
             method: HTTP verb (uppercase: ``"GET"``, ``"POST"``, …).
             path: URL path, e.g. ``"/v1/credit-offers"``.
-            body: Request body as a raw dict (OMIT-filtered by ``serialize_request``).
+            body: Request body as a raw dict (OMIT-filtered by
+                ``serialize_request``).
             query: URL query parameters. ``None`` values are omitted.
-            request_options: Per-call overrides (``RequestOptions``, dict, or ``None``).
+            request_options: Per-call overrides (``RequestOptions``, dict, or
+                ``None``).
 
         Returns:
-            Parsed JSON response body (dict, list, …) or ``None`` for 204 responses.
+            Parsed JSON response body (dict, list, …) or ``None`` for 204
+            responses.
 
         Raises:
-            ``ApiError`` (or a subclass) for every non-2xx response after retries.
+            ``ApiError`` (or a subclass) for every non-2xx response after
+            retries.
         """
         opts = RequestOptions.coerce(request_options)
         max_retries = (
@@ -157,7 +160,8 @@ class SyncHttpClient(BaseClient[httpx.Client]):
         timeout = opts.timeout if opts.timeout is not None else self._default_timeout
         extra_headers: dict[str, str | None] = dict(opts.headers or {})
 
-        # Mint the idempotency key once — reused across all retry attempts
+        # Mint the idempotency key once — reused across all retry attempts so
+        # that retries never create a duplicate resource.
         idempotency_key: str | None
         if method.upper() in IDEMPOTENT_METHODS:
             idempotency_key = opts.idempotency_key or generate_key()
@@ -206,9 +210,9 @@ class SyncHttpClient(BaseClient[httpx.Client]):
             if status == 401 and not auth_retry_done:
                 auth_retry_done = True
                 self._token_manager.invalidate()
-                continue  # retry immediately, no sleep, attempt stays same
+                continue  # retry immediately, no sleep, attempt counter unchanged
 
-            # Retryable + budget remains
+            # Retryable status + budget remains → sleep and retry
             if should_retry(status) and attempt < max_retries:
                 delay = retry_delay(
                     attempt,
@@ -231,7 +235,7 @@ class SyncHttpClient(BaseClient[httpx.Client]):
             )
 
         # Should be unreachable, but guard against the edge where all attempts
-        # were 401s consumed by the one-shot re-auth logic.
+        # were consumed by the one-shot 401 re-auth.
         raise ApiError(
             "Exhausted retry attempts",
             status=0,
@@ -239,43 +243,8 @@ class SyncHttpClient(BaseClient[httpx.Client]):
             headers={},
         )
 
-    def _raw_request(
-        self,
-        method: str,
-        url: str,
-        *,
-        headers: dict[str, str],
-        json: dict[str, Any] | None,
-        params: dict[str, str] | None,
-        timeout: float,
-    ) -> httpx.Response:
-        """Issue the raw HTTP request via the underlying ``httpx.Client``.
-
-        Separated from the retry loop so tests can monkey-patch or override this
-        method cleanly.
-
-        Args:
-            method: HTTP verb.
-            url: Fully-qualified URL.
-            headers: Merged request headers.
-            json: Serialised request body (or ``None``).
-            params: URL query parameters (or ``None``).
-            timeout: Request timeout in seconds.
-
-        Returns:
-            The raw ``httpx.Response``.
-        """
-        return self._http.request(
-            method,
-            url,
-            headers=headers,
-            json=json,
-            params=params,
-            timeout=timeout,
-        )
-
     # ------------------------------------------------------------------
-    # Helpers
+    # Pure helpers (no I/O)
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -288,14 +257,16 @@ class SyncHttpClient(BaseClient[httpx.Client]):
     ) -> dict[str, str]:
         """Merge all header sources into a final headers dict.
 
-        A ``None`` value in ``extra_headers`` removes the corresponding default header
-        (matches Ruby's ``nil``-to-remove behaviour).
+        A ``None`` value in ``extra_headers`` removes the corresponding default
+        header (mirrors Ruby's ``nil``-to-remove behaviour).
 
         Args:
             token: Bearer token for the ``Authorization`` header.
             extra_headers: Per-call overrides from ``RequestOptions.headers``.
-            idempotency_key: Idempotency key, or ``None`` for non-idempotent methods.
-            retry_count: Current attempt index; ``> 0`` → inject ``X-Dinie-Retry-Count``.
+            idempotency_key: Idempotency key, or ``None`` for non-idempotent
+                methods.
+            retry_count: Current attempt index; ``> 0`` → inject
+                ``X-Dinie-Retry-Count``.
 
         Returns:
             A headers dict with string keys and string values.
@@ -312,3 +283,71 @@ class SyncHttpClient(BaseClient[httpx.Client]):
         # Apply per-call overrides last; None removes the key
         merged.update(extra_headers)
         return {k: v for k, v in merged.items() if v is not None}
+
+    # ------------------------------------------------------------------
+    # I/O leaf — MUST be overridden by sub-classes
+    # ------------------------------------------------------------------
+
+    def _raw_request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, Any] | None,
+        params: dict[str, str] | None,
+        timeout: float,
+    ) -> httpx.Response:
+        """Issue the raw HTTP request.
+
+        **D3 extension point.** ``BaseClient.request()`` calls this for every
+        attempt; sub-classes swap in the transport without touching any retry or
+        header logic.
+
+        Args:
+            method: HTTP verb.
+            url: Fully-qualified URL.
+            headers: Merged request headers.
+            json: Serialised request body (or ``None``).
+            params: URL query parameters (or ``None``).
+            timeout: Request timeout in seconds.
+
+        Returns:
+            The raw ``httpx.Response``.
+
+        Raises:
+            ``NotImplementedError`` — sub-classes must override.
+        """
+        raise NotImplementedError(f"{type(self).__name__} must implement _raw_request()")
+
+
+class SyncHttpClient(BaseClient[httpx.Client]):
+    """Synchronous HTTP client built on ``httpx.Client``.
+
+    Instantiated by the generated ``Dinie()`` constructor (story 007). Users
+    never construct this directly.
+
+    **D3:** this class overrides **only** ``_raw_request()`` (~12 lines of I/O).
+    The retry loop, header assembly, idempotency injection, and 401 re-auth are
+    all inherited from ``BaseClient``.
+    """
+
+    def _raw_request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, Any] | None,
+        params: dict[str, str] | None,
+        timeout: float,
+    ) -> httpx.Response:
+        """Delegate the raw HTTP call to the underlying ``httpx.Client``."""
+        return self._http.request(
+            method,
+            url,
+            headers=headers,
+            json=json,
+            params=params,
+            timeout=timeout,
+        )

@@ -29,7 +29,13 @@ if TYPE_CHECKING:
     import httpx
 
 #: Seconds before the token's nominal expiry to treat it as already expired.
-#: Avoids a race where the token expires between our check and the API call.
+#:
+#: 30 s is intentional (the architecture spec suggested 300 s / 5 min, but that
+#: is excessive for a ~1-hour token). The 401 one-shot re-auth in ``SyncHttpClient``
+#: is the safety net for actual expiry races; the buffer only needs to cover
+#: clock-skew and network latency, for which 30 s is ample. A 5-minute buffer
+#: would cause unnecessary pre-emptive refreshes on every call that lands within
+#: the last 5 minutes of a token's lifetime.
 EXPIRY_BUFFER_SECONDS: float = 30.0
 
 #: Dinie auth token endpoint path (relative to base URL).
