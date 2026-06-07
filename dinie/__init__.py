@@ -31,7 +31,12 @@ from dinie.generated.events.loan_finished import LoanFinished
 from dinie.generated.events.loan_payment_received import LoanPaymentReceived
 from dinie.generated.events.loan_processing import LoanProcessing
 from dinie.generated.events.loan_signature_received import LoanSignatureReceived
-from dinie.runtime.errors import APIConnectionError, ApiError, APITimeoutError
+from dinie.runtime.errors import (
+    APIConnectionError,
+    ApiError,
+    APITimeoutError,
+    SessionTokenExpiredError,
+)
 
 __version__ = "0.5.0"
 
@@ -62,4 +67,5 @@ __all__ = [
     "ApiError",
     "APIConnectionError",
     "APITimeoutError",
+    "SessionTokenExpiredError",
 ]

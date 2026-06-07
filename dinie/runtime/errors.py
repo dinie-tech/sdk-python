@@ -5,6 +5,7 @@ Design
 * ``DinieError`` — base; every public exception inherits from it.
 * ``APIConnectionError`` — network-level error (no HTTP response).
 * ``APITimeoutError`` — timeout before receiving a response (sub of APIConnectionError).
+* ``SessionTokenExpiredError`` — session-mode customer token expired (no refresh possible).
 * ``ApiError`` — carries ``status``, ``body``, ``headers`` from a non-2xx response.
 * ``AuthenticationError`` (401), ``PermissionDeniedError`` (403),
   ``NotFoundError`` (404), ``ConflictError`` (409), ``UnprocessableEntityError`` (422),
@@ -55,6 +56,21 @@ class APITimeoutError(APIConnectionError):
     Raised when ``httpx.TimeoutException`` (any of ``ConnectTimeout``,
     ``ReadTimeout``, ``WriteTimeout``, ``PoolTimeout``) escapes the transport.
     The original ``httpx`` exception is available as ``__cause__``.
+    """
+
+
+class SessionTokenExpiredError(DinieError):
+    """The customer-scoped session token has expired and cannot be refreshed.
+
+    Raised in session mode (``Dinie(code=…)``) when the customer token's TTL
+    has elapsed, or when a 401 response is received after the exchange
+    (``TokenManager.invalidate()`` clears the token, and the ``code`` is
+    single-use so no re-exchange is possible).
+
+    The ``code`` is single-use and the exchange response carries no
+    ``refresh_token`` — renewal is impossible from inside the SDK.  The caller
+    must obtain a fresh ``code`` (out-of-band, from a new session URL) and
+    construct a new ``Dinie(code=…)`` instance.
     """
 
 

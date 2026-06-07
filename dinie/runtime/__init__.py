@@ -34,6 +34,10 @@ Story 012 — C1-PY-1 (typed transport exceptions):
 
 Story 013 — multipart transport:
 * ``MultipartBody`` — ``multipart/form-data`` body (fields + optional file)
+
+Story 015a — session mode:
+* ``SessionTokenExpiredError`` — customer token expired (no refresh in session mode)
+* ``SESSION_EXCHANGE_PATH`` — session-exchange endpoint constant
 """
 
 from dinie.runtime.errors import (
@@ -51,6 +55,7 @@ from dinie.runtime.errors import (
     PermissionDeniedError,
     RateLimitError,
     ServiceUnavailableError,
+    SessionTokenExpiredError,
     UnprocessableEntityError,
     from_response,
     register_error,
@@ -91,7 +96,12 @@ from dinie.runtime.retry import (
     retry_delay,
     should_retry,
 )
-from dinie.runtime.token_manager import EXPIRY_BUFFER_SECONDS, TOKEN_PATH, TokenManager
+from dinie.runtime.token_manager import (
+    EXPIRY_BUFFER_SECONDS,
+    SESSION_EXCHANGE_PATH,
+    TOKEN_PATH,
+    TokenManager,
+)
 from dinie.runtime.webhooks import (
     DEFAULT_TOLERANCE_SECONDS,
     EVENT_DESERIALIZERS,
@@ -143,11 +153,13 @@ __all__ = [
     "PermissionDeniedError",
     "RateLimitError",
     "ServiceUnavailableError",
+    "SessionTokenExpiredError",
     "UnprocessableEntityError",
     "from_response",
     "register_error",
     # token manager
     "EXPIRY_BUFFER_SECONDS",
+    "SESSION_EXCHANGE_PATH",
     "TOKEN_PATH",
     "TokenManager",
     # http
