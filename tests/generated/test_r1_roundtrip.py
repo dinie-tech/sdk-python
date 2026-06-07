@@ -23,7 +23,6 @@ from dinie.generated.types.loan import Loan
 from dinie.generated.types.simulation import Simulation
 from dinie.generated.types.update_customer_request import UpdateCustomerRequest
 
-
 # ── Request serialize ─────────────────────────────────────────────────────────
 
 class TestSerializeRoundTrip:
