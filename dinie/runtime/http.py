@@ -41,6 +41,7 @@ import httpx
 from dinie.runtime.errors import APIConnectionError, ApiError, APITimeoutError, from_response
 from dinie.runtime.idempotency import generate_key
 from dinie.runtime.models import serialize_request
+from dinie.runtime.multipart import MultipartBody
 from dinie.runtime.rate_limit import RateLimitTracker
 from dinie.runtime.request_options import RequestOptions
 from dinie.runtime.retry import retry_delay, should_retry
@@ -127,7 +128,7 @@ class BaseClient(Generic[_HttpxClientT]):
         method: str,
         path: str,
         *,
-        body: dict[str, Any] | None = None,
+        body: dict[str, Any] | MultipartBody | None = None,
         query: dict[str, Any] | None = None,
         request_options: RequestOptions | dict[str, Any] | None = None,
     ) -> Any:
@@ -139,8 +140,9 @@ class BaseClient(Generic[_HttpxClientT]):
         Args:
             method: HTTP verb (uppercase: ``"GET"``, ``"POST"``, …).
             path: URL path, e.g. ``"/v1/credit-offers"``.
-            body: Request body as a raw dict (OMIT-filtered by
-                ``serialize_request``).
+            body: Request body — either a plain dict (OMIT-filtered and
+                JSON-encoded) or a ``MultipartBody`` instance
+                (encoded as ``multipart/form-data`` by the transport).
             query: URL query parameters. ``None`` values are omitted.
             request_options: Per-call overrides (``RequestOptions``, dict, or
                 ``None``).
@@ -168,9 +170,15 @@ class BaseClient(Generic[_HttpxClientT]):
         else:
             idempotency_key = None
 
-        serialized_body: dict[str, Any] | None = (
-            serialize_request(body) if body is not None else None
-        )
+        # Multipart bodies pass through un-serialised; dicts are OMIT-filtered.
+        body_to_send: dict[str, Any] | MultipartBody | None
+        if isinstance(body, MultipartBody):
+            body_to_send = body
+        elif body is not None:
+            body_to_send = serialize_request(body)
+        else:
+            body_to_send = None
+
         clean_query: dict[str, str] | None = (
             {k: str(v) for k, v in query.items() if v is not None} if query else None
         )
@@ -190,7 +198,7 @@ class BaseClient(Generic[_HttpxClientT]):
                 method=method.upper(),
                 url=f"{self._base_url}{path}",
                 headers=headers,
-                json=serialized_body,
+                body=body_to_send,
                 params=clean_query,
                 timeout=timeout,
             )
@@ -294,7 +302,7 @@ class BaseClient(Generic[_HttpxClientT]):
         url: str,
         *,
         headers: dict[str, str],
-        json: dict[str, Any] | None,
+        body: dict[str, Any] | MultipartBody | None,
         params: dict[str, str] | None,
         timeout: float,
     ) -> httpx.Response:
@@ -307,8 +315,13 @@ class BaseClient(Generic[_HttpxClientT]):
         Args:
             method: HTTP verb.
             url: Fully-qualified URL.
-            headers: Merged request headers.
-            json: Serialised request body (or ``None``).
+            headers: Merged request headers (includes ``Content-Type:
+                application/json`` for plain dict bodies; the transport
+                strips it for ``MultipartBody`` so ``httpx`` can set the
+                multipart boundary).
+            body: Serialised JSON body (plain dict or ``None``) **or** a
+                ``MultipartBody`` instance to encode as
+                ``multipart/form-data``.
             params: URL query parameters (or ``None``).
             timeout: Request timeout in seconds.
 
@@ -338,24 +351,51 @@ class SyncHttpClient(BaseClient[httpx.Client]):
         url: str,
         *,
         headers: dict[str, str],
-        json: dict[str, Any] | None,
+        body: dict[str, Any] | MultipartBody | None,
         params: dict[str, str] | None,
         timeout: float,
     ) -> httpx.Response:
         """Delegate the raw HTTP call to the underlying ``httpx.Client``.
 
+        Routes ``MultipartBody`` instances through ``httpx``'s
+        ``files=`` / ``data=`` encoding path (sets
+        ``Content-Type: multipart/form-data; boundary=…``); plain dicts
+        go through the ``json=`` path (``Content-Type: application/json``).
+
         ``httpx.TimeoutException`` (``ConnectTimeout``, ``ReadTimeout``,
         ``WriteTimeout``, ``PoolTimeout``) is translated to
         ``APITimeoutError``; ``httpx.ConnectError`` is translated to
-        ``APIConnectionError``.  All other ``httpx`` exceptions propagate
-        unchanged.  The original exception is chained via ``__cause__``.
+        ``APIConnectionError``.  The original exception is chained via
+        ``__cause__``.
         """
         try:
+            if isinstance(body, MultipartBody):
+                # Build httpx files= / data= args.
+                # files= (even when empty) triggers multipart/form-data encoding;
+                # httpx appends the boundary automatically.
+                httpx_files: dict[str, tuple[str, bytes | Any, str]] = {}
+                if body.file is not None:
+                    httpx_files["file"] = (
+                        body.file_name,
+                        body.file,
+                        body.file_content_type,
+                    )
+                # Strip Content-Type: application/json — httpx sets the multipart one.
+                mp_headers = {k: v for k, v in headers.items() if k.lower() != "content-type"}
+                return self._http.request(
+                    method,
+                    url,
+                    headers=mp_headers,
+                    data=dict(body.fields) if body.fields else None,
+                    files=httpx_files,
+                    params=params,
+                    timeout=timeout,
+                )
             return self._http.request(
                 method,
                 url,
                 headers=headers,
-                json=json,
+                json=body,
                 params=params,
                 timeout=timeout,
             )

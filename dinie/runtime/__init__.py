@@ -4,8 +4,8 @@ This package contains the hand-written infrastructure: HTTP client, token
 management, retry logic, pagination, error hierarchy, webhook verification,
 logging, idempotency, and rate-limit tracking.
 
-Public surface (story 003 + 004)
----------------------------------
+Public surface (story 003 + 004 + 012 + 013)
+---------------------------------------------
 Story 003 — transport spine:
 * ``OMIT`` / ``OmitType`` / ``Model`` / ``serialize_request`` — model utilities
 * ``RequestOptions`` — per-call transport overrides
@@ -27,11 +27,20 @@ Story 004 — domain layer:
 * ``SyncCursorPage`` — cursor-paginated results (``has_more``-driven)
 * ``SensitiveDataFilter`` / ``setup_logging`` / ``get_logger`` / ``redact_headers``
   / ``redact_body`` — logging infrastructure
+
+Story 012 — C1-PY-1 (typed transport exceptions):
+* ``APIConnectionError`` — network-level error (no HTTP response)
+* ``APITimeoutError`` — timeout subclass of ``APIConnectionError``
+
+Story 013 — multipart transport:
+* ``MultipartBody`` — ``multipart/form-data`` body (fields + optional file)
 """
 
 from dinie.runtime.errors import (
     ERROR_REGISTRY,
+    APIConnectionError,
     ApiError,
+    APITimeoutError,
     AuthenticationError,
     BadGatewayError,
     ConflictError,
@@ -69,6 +78,7 @@ from dinie.runtime.logger import (
     setup_logging,
 )
 from dinie.runtime.models import OMIT, Model, OmitType, serialize_request
+from dinie.runtime.multipart import DEFAULT_FILE_CONTENT_TYPE, DEFAULT_FILE_NAME, MultipartBody
 from dinie.runtime.paginator import SyncCursorPage
 from dinie.runtime.rate_limit import RateLimit, RateLimitTracker
 from dinie.runtime.request_options import RequestOptions
@@ -119,6 +129,8 @@ __all__ = [
     "retry_delay",
     "should_retry",
     # errors
+    "APIConnectionError",
+    "APITimeoutError",
     "ApiError",
     "AuthenticationError",
     "BadGatewayError",
@@ -145,6 +157,10 @@ __all__ = [
     "IDEMPOTENT_METHODS",
     "BaseClient",
     "SyncHttpClient",
+    # multipart (story 013)
+    "DEFAULT_FILE_CONTENT_TYPE",
+    "DEFAULT_FILE_NAME",
+    "MultipartBody",
     # webhooks (story 004)
     "DEFAULT_TOLERANCE_SECONDS",
     "EVENT_DESERIALIZERS",
