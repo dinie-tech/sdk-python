@@ -38,7 +38,7 @@ from typing import Any, Generic, TypeVar
 
 import httpx
 
-from dinie.runtime.errors import ApiError, from_response
+from dinie.runtime.errors import APIConnectionError, ApiError, APITimeoutError, from_response
 from dinie.runtime.idempotency import generate_key
 from dinie.runtime.models import serialize_request
 from dinie.runtime.rate_limit import RateLimitTracker
@@ -342,12 +342,24 @@ class SyncHttpClient(BaseClient[httpx.Client]):
         params: dict[str, str] | None,
         timeout: float,
     ) -> httpx.Response:
-        """Delegate the raw HTTP call to the underlying ``httpx.Client``."""
-        return self._http.request(
-            method,
-            url,
-            headers=headers,
-            json=json,
-            params=params,
-            timeout=timeout,
-        )
+        """Delegate the raw HTTP call to the underlying ``httpx.Client``.
+
+        ``httpx.TimeoutException`` (``ConnectTimeout``, ``ReadTimeout``,
+        ``WriteTimeout``, ``PoolTimeout``) is translated to
+        ``APITimeoutError``; ``httpx.ConnectError`` is translated to
+        ``APIConnectionError``.  All other ``httpx`` exceptions propagate
+        unchanged.  The original exception is chained via ``__cause__``.
+        """
+        try:
+            return self._http.request(
+                method,
+                url,
+                headers=headers,
+                json=json,
+                params=params,
+                timeout=timeout,
+            )
+        except httpx.TimeoutException as e:
+            raise APITimeoutError(str(e) or "Request timed out") from e
+        except httpx.ConnectError as e:
+            raise APIConnectionError(str(e) or "Connection error") from e

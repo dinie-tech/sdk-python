@@ -3,6 +3,8 @@
 Design
 ------
 * ``DinieError`` — base; every public exception inherits from it.
+* ``APIConnectionError`` — network-level error (no HTTP response).
+* ``APITimeoutError`` — timeout before receiving a response (sub of APIConnectionError).
 * ``ApiError`` — carries ``status``, ``body``, ``headers`` from a non-2xx response.
 * ``AuthenticationError`` (401), ``PermissionDeniedError`` (403),
   ``NotFoundError`` (404), ``ConflictError`` (409), ``UnprocessableEntityError`` (422),
@@ -33,6 +35,26 @@ class DinieError(Exception):
 
     Catch this to handle all SDK errors uniformly. Use a subclass for narrower
     handling (e.g. ``except RateLimitError``).
+    """
+
+
+class APIConnectionError(DinieError):
+    """Network-level error — the request did not receive an HTTP response.
+
+    Raised when a transport exception (connection refused, DNS failure, etc.)
+    prevents the request from reaching the server.  The original
+    ``httpx`` exception is available as ``__cause__``.
+
+    Subclasses: ``APITimeoutError``.
+    """
+
+
+class APITimeoutError(APIConnectionError):
+    """The request timed out before receiving an HTTP response.
+
+    Raised when ``httpx.TimeoutException`` (any of ``ConnectTimeout``,
+    ``ReadTimeout``, ``WriteTimeout``, ``PoolTimeout``) escapes the transport.
+    The original ``httpx`` exception is available as ``__cause__``.
     """
 
 

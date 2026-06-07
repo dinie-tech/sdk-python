@@ -31,7 +31,7 @@ from dinie.generated.events.loan_finished import LoanFinished
 from dinie.generated.events.loan_payment_received import LoanPaymentReceived
 from dinie.generated.events.loan_processing import LoanProcessing
 from dinie.generated.events.loan_signature_received import LoanSignatureReceived
-from dinie.runtime.errors import ApiError
+from dinie.runtime.errors import APIConnectionError, ApiError, APITimeoutError
 
 __version__ = "0.5.0"
 
@@ -60,4 +60,6 @@ __all__ = [
     "LoanSignatureReceived",
     # Errors
     "ApiError",
+    "APIConnectionError",
+    "APITimeoutError",
 ]

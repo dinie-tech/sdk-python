@@ -6,6 +6,8 @@ DoD coverage:
 - DoD-R4: 429→200 retries with same idempotency key; 409 NOT retried;
           Retry-After:120 capped at ≤60s; X-Dinie-Retry-Count:N on retries
 - DoD-R5: 401→invalidate→retry (one-shot re-auth)
+- DoD-C1: httpx.TimeoutException → APITimeoutError (typed, __cause__ preserved)
+          httpx.ConnectError → APIConnectionError (bonus)
 
 pytest-httpx is used for all HTTP interception — no real network calls.
 """
@@ -20,7 +22,9 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from dinie.runtime.errors import (
+    APIConnectionError,
     ApiError,
+    APITimeoutError,
     ConflictError,
 )
 from dinie.runtime.http import (
@@ -510,3 +514,144 @@ class TestRateLimitTracking:
         assert client.rate_limit.snapshot is not None
         assert client.rate_limit.snapshot.limit == 100
         assert client.rate_limit.snapshot.remaining == 42
+
+
+# -------------------------------------------------------------------------
+# DoD-C1: Typed exception translation (timeout / connection errors)
+# -------------------------------------------------------------------------
+
+
+class TestTimeoutAndConnectionErrors:
+    """DoD-C1: transport exceptions are translated to typed SDK errors."""
+
+    def test_read_timeout_raises_api_timeout_error(
+        self, http_client: httpx.Client, httpx_mock: HTTPXMock
+    ) -> None:
+        """httpx.ReadTimeout → APITimeoutError; __cause__ is the original exception."""
+        httpx_mock.add_response(url=TOKEN_URL, method="POST", json=_token_response())
+        httpx_mock.add_exception(
+            httpx.ReadTimeout("read timed out", request=httpx.Request("GET", API_URL)),
+            url=API_URL,
+        )
+
+        manager = TokenManager(
+            client_id="id", client_secret="s", base_url=BASE_URL, http_client=http_client
+        )
+        client = SyncHttpClient(
+            base_url=BASE_URL,
+            max_retries=0,
+            timeout=1.0,
+            http_client=http_client,
+            token_manager=manager,
+        )
+
+        with pytest.raises(APITimeoutError) as exc_info:
+            client.request("GET", "/v1/resource")
+
+        err = exc_info.value
+        # DoD-C1: typed, not raw httpx
+        assert isinstance(err, APITimeoutError)
+        # Hierarchy: APITimeoutError → APIConnectionError → DinieError
+        assert isinstance(err, APIConnectionError)
+        from dinie.runtime.errors import DinieError
+
+        assert isinstance(err, DinieError)
+        # __cause__ preserved
+        assert isinstance(err.__cause__, httpx.TimeoutException)
+
+    def test_connect_timeout_raises_api_timeout_error(
+        self, http_client: httpx.Client, httpx_mock: HTTPXMock
+    ) -> None:
+        """httpx.ConnectTimeout (subclass of TimeoutException) → APITimeoutError."""
+        httpx_mock.add_response(url=TOKEN_URL, method="POST", json=_token_response())
+        httpx_mock.add_exception(
+            httpx.ConnectTimeout("connect timed out", request=httpx.Request("GET", API_URL)),
+            url=API_URL,
+        )
+
+        manager = TokenManager(
+            client_id="id", client_secret="s", base_url=BASE_URL, http_client=http_client
+        )
+        client = SyncHttpClient(
+            base_url=BASE_URL,
+            max_retries=0,
+            timeout=1.0,
+            http_client=http_client,
+            token_manager=manager,
+        )
+
+        with pytest.raises(APITimeoutError):
+            client.request("GET", "/v1/resource")
+
+    def test_connect_error_raises_api_connection_error(
+        self, http_client: httpx.Client, httpx_mock: HTTPXMock
+    ) -> None:
+        """Bonus: httpx.ConnectError → APIConnectionError (not APITimeoutError)."""
+        httpx_mock.add_response(url=TOKEN_URL, method="POST", json=_token_response())
+        httpx_mock.add_exception(
+            httpx.ConnectError("connection refused"),
+            url=API_URL,
+        )
+
+        manager = TokenManager(
+            client_id="id", client_secret="s", base_url=BASE_URL, http_client=http_client
+        )
+        client = SyncHttpClient(
+            base_url=BASE_URL,
+            max_retries=0,
+            timeout=1.0,
+            http_client=http_client,
+            token_manager=manager,
+        )
+
+        with pytest.raises(APIConnectionError) as exc_info:
+            client.request("GET", "/v1/resource")
+
+        err = exc_info.value
+        # ConnectError → APIConnectionError, NOT APITimeoutError
+        assert not isinstance(err, APITimeoutError)
+        assert isinstance(err.__cause__, httpx.ConnectError)
+
+    def test_successful_request_does_not_raise_timeout(
+        self, http_client: httpx.Client, httpx_mock: HTTPXMock
+    ) -> None:
+        """Control: a normal 200 response does not raise APITimeoutError."""
+        httpx_mock.add_response(url=TOKEN_URL, method="POST", json=_token_response())
+        httpx_mock.add_response(url=API_URL, method="GET", json={"ok": True})
+
+        manager = TokenManager(
+            client_id="id", client_secret="s", base_url=BASE_URL, http_client=http_client
+        )
+        client = SyncHttpClient(
+            base_url=BASE_URL,
+            max_retries=0,
+            timeout=5.0,
+            http_client=http_client,
+            token_manager=manager,
+        )
+
+        result = client.request("GET", "/v1/resource")
+        assert result == {"ok": True}
+
+    def test_http_status_error_not_wrapped_as_timeout(
+        self, http_client: httpx.Client, httpx_mock: HTTPXMock
+    ) -> None:
+        """Non-timeout HTTP errors (e.g. 500) are raised as ApiError, not APITimeoutError."""
+        httpx_mock.add_response(url=TOKEN_URL, method="POST", json=_token_response())
+        httpx_mock.add_response(url=API_URL, method="GET", status_code=500)
+
+        manager = TokenManager(
+            client_id="id", client_secret="s", base_url=BASE_URL, http_client=http_client
+        )
+        client = SyncHttpClient(
+            base_url=BASE_URL,
+            max_retries=0,
+            timeout=5.0,
+            http_client=http_client,
+            token_manager=manager,
+        )
+
+        with pytest.raises(ApiError) as exc_info:
+            client.request("GET", "/v1/resource")
+
+        assert not isinstance(exc_info.value, APITimeoutError)
