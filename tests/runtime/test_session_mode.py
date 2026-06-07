@@ -11,6 +11,7 @@ DoD coverage:
        False; no caching; single-flight unlocked; no cc-bearer afterwards.
   lazy — Dinie(code=…) does no I/O in __init__.
 """
+
 from __future__ import annotations
 
 import threading
@@ -113,9 +114,9 @@ class TestPartnerModeUnchanged:
 
     def test_partner_mode_refreshes_on_invalidate(self) -> None:
         tm, log = _make_token_manager(code=None)
-        _ = tm.token          # first call — 1 POST /auth/token
+        _ = tm.token  # first call — 1 POST /auth/token
         tm.invalidate()
-        _ = tm.token          # second call — should re-fetch
+        _ = tm.token  # second call — should re-fetch
         assert len(log) == 2
         assert all(TOKEN_PATH in str(r.url) for r in log)
 
@@ -315,8 +316,8 @@ class TestExpiryHonest:
     def test_invalidate_after_exchange_raises_session_expired(self) -> None:
         """Simulate a 401 → invalidate(); next token() → SessionTokenExpiredError."""
         tm, log = _make_token_manager(code=VALID_CODE)
-        _ = tm.token          # exchange done
-        tm.invalidate()       # simulates 401 one-shot re-auth path in http.py
+        _ = tm.token  # exchange done
+        tm.invalidate()  # simulates 401 one-shot re-auth path in http.py
 
         with pytest.raises(SessionTokenExpiredError) as exc_info:
             _ = tm.token
@@ -326,7 +327,7 @@ class TestExpiryHonest:
     def test_no_second_exchange_after_invalidate(self) -> None:
         """No 2nd /session-exchange after expiry."""
         tm, log = _make_token_manager(code=VALID_CODE)
-        _ = tm.token          # exchange done (2 calls: auth + exchange)
+        _ = tm.token  # exchange done (2 calls: auth + exchange)
 
         initial_len = len(log)
         tm.invalidate()

@@ -6,6 +6,7 @@ from .articles_of_association_requirement import ArticlesOfAssociationRequiremen
 from .articles_of_association_submitted import ArticlesOfAssociationSubmitted
 from .bank import Bank
 from .biometrics_session import BiometricsSession
+from .biometrics_session_exchange_response import BiometricsSessionExchangeResponse
 from .company_document_attachment import CompanyDocumentAttachment
 from .company_document_requirement import CompanyDocumentRequirement
 from .company_document_submitted import CompanyDocumentSubmitted
@@ -89,6 +90,7 @@ __all__ = [
     "ArticlesOfAssociationSubmitted",
     "Bank",
     "BiometricsSession",
+    "BiometricsSessionExchangeResponse",
     "CompanyDocumentAttachment",
     "CompanyDocumentRequirement",
     "CompanyDocumentSubmitted",

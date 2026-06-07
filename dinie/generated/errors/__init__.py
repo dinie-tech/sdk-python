@@ -10,7 +10,7 @@ from .auth_error import AuthError
 from .bad_request_error import BadRequestError
 from .conflict_error import ConflictError
 from .not_found_error import NotFoundError
-from .permission_error import PermissionError
+from .permission_denied_error import PermissionDeniedError
 from .rate_limit_error import RateLimitError
 from .server_error import ServerError
 from .validation_error import ValidationError
@@ -21,7 +21,7 @@ ERROR_REGISTRY_BY_TYPE: dict[str, type[ApiError]] = {
     "https://docs.dinie.com/errors/invalid-request": BadRequestError,
     "https://docs.dinie.com/errors/conflict": ConflictError,
     "https://docs.dinie.com/errors/not-found": NotFoundError,
-    "https://docs.dinie.com/errors/forbidden": PermissionError,
+    "https://docs.dinie.com/errors/forbidden": PermissionDeniedError,
     "https://docs.dinie.com/errors/rate-limit-exceeded": RateLimitError,
     "https://docs.dinie.com/errors/internal": ServerError,
     "https://docs.dinie.com/errors/validation-failed": ValidationError,
@@ -31,7 +31,7 @@ ERROR_REGISTRY_BY_TYPE: dict[str, type[ApiError]] = {
 ERROR_REGISTRY_BY_STATUS: dict[int, type[ApiError]] = {
     400: BadRequestError,
     401: AuthError,
-    403: PermissionError,
+    403: PermissionDeniedError,
     404: NotFoundError,
     409: ConflictError,
     422: ValidationError,
@@ -45,7 +45,7 @@ SERVER_ERROR_CLASS: type[ApiError] = ServerError
 __all__ = [
     "BadRequestError",
     "AuthError",
-    "PermissionError",
+    "PermissionDeniedError",
     "NotFoundError",
     "ConflictError",
     "ValidationError",

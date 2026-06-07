@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...runtime.http import SyncHttpClient
+from ...runtime.multipart import MultipartBody
 from ...runtime.paginator import SyncCursorPage
 from ...runtime.request_options import RequestOptions
 from ..types.biometrics_session import BiometricsSession
@@ -150,7 +151,25 @@ class KycAttachments:
         raw = self._http.request(
             "POST",
             f"/customers/{customer_id}/kyc-attachments",
-            body=params,
+            body=MultipartBody(
+                fields={k: v for k, v in params.items() if k != "file"}, file=params.get("file")
+            ),
+            request_options=request_options,
+        )
+        return KycAttachmentResponse.deserialize(raw)
+
+    def upload_selfie(
+        self,
+        customer_id: str,
+        params: Any,
+        request_options: RequestOptions | None = None,
+    ) -> KycAttachmentResponse:
+        raw = self._http.request(
+            "POST",
+            f"/customers/{customer_id}/kyc-attachments/selfie",
+            body=MultipartBody(
+                fields={k: v for k, v in params.items() if k != "file"}, file=params.get("file")
+            ),
             request_options=request_options,
         )
         return KycAttachmentResponse.deserialize(raw)

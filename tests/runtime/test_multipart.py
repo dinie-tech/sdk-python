@@ -156,9 +156,7 @@ class TestMultipartTransport:
         upload_req = [r for r in httpx_mock.get_requests() if r.url.path == "/v1/upload"][0]
         assert file_bytes in upload_req.content
 
-    def test_file_from_binary_io(
-        self, http_client: httpx.Client, httpx_mock: HTTPXMock
-    ) -> None:
+    def test_file_from_binary_io(self, http_client: httpx.Client, httpx_mock: HTTPXMock) -> None:
         """BytesIO file is encoded correctly as multipart."""
         client = _make_client(http_client, httpx_mock)
         httpx_mock.add_response(url=UPLOAD_URL, method="POST", json={"id": "ok"})
@@ -181,8 +179,11 @@ class TestMultipartTransport:
             client_id="id", client_secret="secret", base_url=BASE_URL, http_client=http_client
         )
         client = SyncHttpClient(
-            base_url=BASE_URL, max_retries=0, timeout=5.0,
-            http_client=http_client, token_manager=manager,
+            base_url=BASE_URL,
+            max_retries=0,
+            timeout=5.0,
+            http_client=http_client,
+            token_manager=manager,
         )
 
         body = MultipartBody(fields={"f": "v"}, file=b"data")
@@ -244,9 +245,7 @@ class TestJsonPathNotRegressed:
     ) -> None:
         """GET with no body sends no Content-Type header (no regression)."""
         client = _make_client(http_client, httpx_mock)
-        httpx_mock.add_response(
-            url=f"{BASE_URL}/v1/resource", method="GET", json={"id": "1"}
-        )
+        httpx_mock.add_response(url=f"{BASE_URL}/v1/resource", method="GET", json={"id": "1"})
         client.request("GET", "/v1/resource")
         # No assertion needed — we just verify it doesn't raise
 

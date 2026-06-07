@@ -12,6 +12,7 @@ Webhook events:
     match event:
         case dinie.CustomerCreatedEvent(): ...
 """
+
 from __future__ import annotations
 
 from dinie.generated.client import Dinie

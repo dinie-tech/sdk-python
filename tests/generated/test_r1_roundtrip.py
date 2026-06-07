@@ -25,6 +25,7 @@ from dinie.generated.types.update_customer_request import UpdateCustomerRequest
 
 # ── Request serialize ─────────────────────────────────────────────────────────
 
+
 class TestSerializeRoundTrip:
     """Each request type's serialize_* method must produce the exact wire dict
     that matches the OpenAPI request-body example."""
@@ -137,6 +138,7 @@ class TestSerializeRoundTrip:
 
 # ── Response deserialize ──────────────────────────────────────────────────────
 
+
 class TestDeserializeRoundTrip:
     """Each response type must deserialize the OpenAPI response example to a
     typed model with exact field values."""
@@ -176,7 +178,10 @@ class TestDeserializeRoundTrip:
             "expires_at": 1741082400,
         }
         session = BiometricsSession.deserialize(raw)
-        assert session.session_url == "https://kyc-app.dinie.com.br/session/dinie_bsc_test_abc123def456"
+        assert (
+            session.session_url
+            == "https://kyc-app.dinie.com.br/session/dinie_bsc_test_abc123def456"
+        )
         assert isinstance(session.expires_at, int)
         assert session.expires_at == 1741082400
 
@@ -217,7 +222,7 @@ class TestDeserializeRoundTrip:
         assert loan.status == "awaiting_signatures"
         assert loan.requested_amount == 25000.00
         assert loan.first_due_date == "2026-04-03"  # date stays as string (not date object)
-        assert isinstance(loan.created_at, int)      # epoch stays int
+        assert isinstance(loan.created_at, int)  # epoch stays int
         assert loan.installment_count == 4
 
     def test_simulation_deserialize(self) -> None:

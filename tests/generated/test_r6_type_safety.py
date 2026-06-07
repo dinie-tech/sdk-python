@@ -105,13 +105,13 @@ class TestR6TypeSafety:
         """
         exit_code, output = _run_mypy(script, tmp_path)
         assert exit_code == 0, (
-            "mypy should PASS for a consumer script with correct types. "
-            f"mypy output:\n{output}"
+            f"mypy should PASS for a consumer script with correct types. mypy output:\n{output}"
         )
 
     def test_py_typed_marker_exists(self) -> None:
         """py.typed marker file must exist in the dinie package (PEP 561 / C-COLO-1)."""
         import dinie
+
         pkg_path = Path(dinie.__file__).parent
         marker = pkg_path / "py.typed"
         assert marker.exists(), (
@@ -140,6 +140,5 @@ class TestR6TypeSafety:
         """
         exit_code, output = _run_mypy(script, tmp_path)
         assert exit_code == 0, (
-            "Event deserialize and data access should pass mypy --strict. "
-            f"mypy output:\n{output}"
+            f"Event deserialize and data access should pass mypy --strict. mypy output:\n{output}"
         )
