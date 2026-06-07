@@ -1,8 +1,20 @@
-"""Dinie SDK generated layer — spec-driven, do not hand-edit.
+# generated — do not edit
+from __future__ import annotations
 
-This package is emitted by the sdk-generator (story 007 — ``generate --target python``).
-The generator writes: client.py, resources/, types/, events/, errors/, and this __init__.py.
+from .client import Dinie
+from .errors import (
+    ERROR_REGISTRY_BY_STATUS,
+    ERROR_REGISTRY_BY_TYPE,
+    SERVER_ERROR_CLASS,
+)
+from .events import EVENT_DESERIALIZERS, WebhookEvent
+from .types import *  # noqa: F401, F403
 
-Editing files here directly is a CODEOWNERS violation. To change the generated surface,
-update the OpenAPI spec or sdk-config.yml and re-run the generator.
-"""
+__all__ = [
+    "Dinie",
+    "ERROR_REGISTRY_BY_TYPE",
+    "ERROR_REGISTRY_BY_STATUS",
+    "SERVER_ERROR_CLASS",
+    "EVENT_DESERIALIZERS",
+    "WebhookEvent",
+]
