@@ -10,6 +10,8 @@ from ..types.simulation import Simulation
 
 
 class CreditOffers:
+    """CreditOffers resource client."""
+
     def __init__(self, http: SyncHttpClient) -> None:
         self._http = http
 
@@ -19,6 +21,14 @@ class CreditOffers:
         params: CreateSimulationRequest,
         request_options: RequestOptions | None = None,
     ) -> Simulation:
+        """
+        Simulate a loan
+
+        Simulate a loan scenario for a credit offer, returning installment value, fees, and total cost
+
+        :param credit_offer_id: Identificador único da oferta de crédito
+        :param params: Request parameters.
+        """
         raw = self._http.request(
             "POST",
             f"/credit-offers/{credit_offer_id}/simulations",
@@ -31,6 +41,11 @@ class CreditOffers:
         self,
         request_options: RequestOptions | None = None,
     ) -> SyncCursorPage[CreditOffer]:
+        """
+        List credit offers
+
+        List credit offers across all customers, filterable by `customer_id` and `status`
+        """
         raw = self._http.request("GET", "/credit-offers", request_options=request_options)
         return SyncCursorPage.from_response(raw, item_type=deserialize_credit_offer)
 
@@ -39,6 +54,13 @@ class CreditOffers:
         credit_offer_id: str,
         request_options: RequestOptions | None = None,
     ) -> CreditOffer:
+        """
+        Retrieve a credit offer
+
+        Return the full credit offer object with approved amount, interest rate, and validity
+
+        :param credit_offer_id: Identificador único da oferta de crédito
+        """
         raw = self._http.request(
             "GET", f"/credit-offers/{credit_offer_id}", request_options=request_options
         )
