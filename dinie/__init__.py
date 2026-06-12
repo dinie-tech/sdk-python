@@ -15,6 +15,8 @@ Webhook events:
 
 from __future__ import annotations
 
+import importlib.metadata
+
 from dinie.generated.client import Dinie
 from dinie.generated.events import WebhookEvent
 from dinie.generated.events.credit_offer_available import CreditOfferAvailable
@@ -39,10 +41,14 @@ from dinie.runtime.errors import (
     SessionTokenExpiredError,
 )
 
-__version__ = "0.5.0"
+try:
+    __version__: str = importlib.metadata.version("dinie-sdk")
+except importlib.metadata.PackageNotFoundError:
+    __version__ = "0.0.0+dev"
 
-# C-COLO-2: __version__ is the single source of truth.
-# The runtime User-Agent header ("Dinie-SDK-Python/<ver>") reads from here.
+# C-COLO-2: __version__ is derived from the installed package metadata (PEP 566).
+# sdk_version in the User-Agent (runtime/http.py) reads from the same source via
+# importlib.metadata.version("dinie-sdk") so both track the manifest, not a second literal.
 
 __all__ = [
     "__version__",

@@ -31,8 +31,6 @@ jobs:
       - name: ruff format check
         run: ruff format --check dinie/ tests/
 
-      # mypy runs on the hand-written package only. The generated layer (dinie/generated/)
-      # is linted after story 007 lands; runtime/ after stories 003/004.
       - name: mypy strict
         run: mypy --strict dinie/
 
@@ -48,3 +46,55 @@ jobs:
           DINIE_CLIENT_ID: ${{ secrets.DINIE_CLIENT_ID }}
           DINIE_CLIENT_SECRET: ${{ secrets.DINIE_CLIENT_SECRET }}
           DINIE_BASE_URL: ${{ secrets.DINIE_BASE_URL }}
+
+  drift:
+    # D7: hermetic drift gate — verifies committed dinie/generated/ matches what
+    # sdk-generator emits from its vendored golden spec (no oasdiff, no api-docs
+    # checkout). A hand-edit to generated/ makes this job red; reverting makes it green.
+    #
+    # Requires (user-created):
+    #   - vars.GH_APP_ID
+    #   - secrets.GH_APP_PRIVATE_KEY
+    name: Drift gate (sdk-generator check)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout sdk-python
+        uses: actions/checkout@v4
+
+      - name: Mint GitHub App token (org-scoped — generator access)
+        id: app
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: dinie-tech
+
+      - name: Checkout sdk-generator (vendored golden)
+        uses: actions/checkout@v4
+        with:
+          repository: dinie-tech/sdk-generator
+          path: .gen
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      # Python + ruff — the generator's `check --target python` runs `ruff format` to
+      # normalize generated code before diff. Without ruff, the drift check fails with
+      # "Executable not found in $PATH: ruff".
+      - name: Setup Python 3.12 + ruff (drift gate dependency)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ruff (pinned — matches generator CI)
+        run: pip install ruff==0.15.5
+
+      - name: Install generator dependencies
+        run: cd .gen && bun install
+
+      - name: Run drift check (hermetic — no oasdiff, no api-docs)
+        # Emits from the generator's vendored golden spec and diffs vs committed
+        # dinie/generated/. Exit 1 if any file differs → CI red (D7).
+        run: cd .gen && bun src/cli.ts check --target python --output "$GITHUB_WORKSPACE"

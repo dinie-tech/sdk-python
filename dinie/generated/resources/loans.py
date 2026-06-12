@@ -10,6 +10,8 @@ from ..types.transaction import Transaction
 
 
 class Loans:
+    """Loans resource client."""
+
     def __init__(self, http: SyncHttpClient) -> None:
         self._http = http
         self._transactions = Transactions(http)
@@ -23,6 +25,13 @@ class Loans:
         params: CreateLoanRequest,
         request_options: RequestOptions | None = None,
     ) -> Loan:
+        """
+        Create a loan
+
+        Create a loan from a credit offer and accepted simulation; the CCB contract is generated synchronously and the loan starts in `awaiting_signatures` status
+
+        :param params: Request parameters.
+        """
         raw = self._http.request(
             "POST",
             "/loans",
@@ -36,11 +45,20 @@ class Loans:
         loan_id: str,
         request_options: RequestOptions | None = None,
     ) -> Loan:
+        """
+        Retrieve a loan
+
+        Return the full loan object with lifecycle details
+
+        :param loan_id: Identificador único do empréstimo
+        """
         raw = self._http.request("GET", f"/loans/{loan_id}", request_options=request_options)
         return Loan.deserialize(raw)
 
 
 class Transactions:
+    """Transactions sub-resource client."""
+
     def __init__(self, http: SyncHttpClient) -> None:
         self._http = http
 
@@ -49,6 +67,13 @@ class Transactions:
         loan_id: str,
         request_options: RequestOptions | None = None,
     ) -> SyncCursorPage[Transaction]:
+        """
+        List loan transactions
+
+        List installment transactions for a loan with due dates, amounts, and payment status
+
+        :param loan_id: Identificador único do empréstimo
+        """
         raw = self._http.request(
             "GET", f"/loans/{loan_id}/transactions", request_options=request_options
         )

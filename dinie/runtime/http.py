@@ -33,11 +33,14 @@ Non-goals (for v1)
 
 from __future__ import annotations
 
+import importlib.metadata
+import sys
 import time
 from typing import Any, Generic, TypeVar
 
 import httpx
 
+from dinie.generated._api_version import API_VERSION as _API_VERSION
 from dinie.runtime.errors import APIConnectionError, ApiError, APITimeoutError, from_response
 from dinie.runtime.idempotency import generate_key
 from dinie.runtime.models import serialize_request
@@ -61,6 +64,21 @@ DEFAULT_TIMEOUT = 60.0
 #: Methods for which the SDK automatically injects a new ``Idempotency-Key``
 #: when one isn't supplied explicitly via ``RequestOptions``.
 IDEMPOTENT_METHODS = frozenset({"POST", "PATCH", "PUT", "DELETE"})
+
+# ── User-Agent ────────────────────────────────────────────────────────────────
+# sdk_version ← installed package metadata (PEP 566); falls back to dev sentinel
+# so source-tree runs don't crash before the package is installed.
+# api_version ← generated constant (dinie.generated._api_version.API_VERSION);
+# updated by `generate` whenever info.version changes — never hardcoded.
+try:
+    _SDK_VERSION: str = importlib.metadata.version("dinie-sdk")
+except importlib.metadata.PackageNotFoundError:
+    _SDK_VERSION = "0.0.0+dev"
+
+_PYTHON_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+_USER_AGENT = (
+    f"Dinie-SDK-Python/{_SDK_VERSION} (api-version={_API_VERSION}; python/{_PYTHON_VERSION})"
+)
 
 
 class BaseClient(Generic[_HttpxClientT]):
@@ -283,6 +301,7 @@ class BaseClient(Generic[_HttpxClientT]):
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "User-Agent": _USER_AGENT,
         }
         if idempotency_key is not None:
             merged["Idempotency-Key"] = idempotency_key

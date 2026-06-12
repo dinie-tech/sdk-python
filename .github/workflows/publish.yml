@@ -1,22 +1,68 @@
 name: Publish
 
-# PyPI publishing is planned for V1.0. This workflow is a stub.
-# When V1.0 ships, wire up Trusted Publishing (OIDC) via pypa/gh-action-pypi-publish.
-# No static credentials — use the GitHub → PyPI OIDC federation pattern.
+# Publishes dinie-sdk to PyPI via OIDC Trusted Publishing (keyless — no token).
+#
+# D1: No PYPI_API_TOKEN here, in the job, or anywhere in this repo — authentication
+# is solely via the OIDC id-token (GitHub → PyPI federation, pypa/gh-action-pypi-publish).
+#
+# D8: Triggered by a tag push (v*). The tag is auto-created by tag-release.yml on a
+# generator-bump PR merge.
+#
+# D9: tag-release.yml pushes the tag with the GitHub App token (not GITHUB_TOKEN) so
+# that this workflow actually fires — GITHUB_TOKEN-pushed tags do NOT trigger other
+# workflows (GitHub anti-recursion guard).
+#
+# Requires (user-created):
+#   - PyPI pending publisher registered: project=dinie-sdk, owner=dinie-tech,
+#     repo=sdk-python, workflow=publish.yml, environment=pypi
+#   - GitHub Environment 'pypi' created on this repo
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   publish:
-    name: Publish to PyPI (V1.0 — stub)
+    name: Publish to PyPI + create GitHub Release
     runs-on: ubuntu-latest
+    environment: pypi
+
+    permissions:
+      id-token: write  # MANDATORY for OIDC Trusted Publishing (D1)
+      contents: write  # required to create the GitHub Release
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Not yet implemented
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build distribution
+        run: pip install build && python -m build
+
+      - name: Publish to PyPI (OIDC — no token)
+        # Keyless: no password or PYPI_API_TOKEN — the OIDC id-token is the credential.
+        # On first publish the PyPI pending publisher becomes a normal trusted publisher.
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Extract release notes from CHANGELOG
+        # DoD #7: extracts the [X.Y.Z] section verbatim so the GitHub Release body
+        # equals the CHANGELOG section byte-for-byte (modulo surrounding whitespace).
         run: |
-          echo "PyPI publishing is deferred to V1.0."
-          echo "See CHANGELOG.md and the V1.0 roadmap."
-          echo "Wire up pypa/gh-action-pypi-publish with OIDC Trusted Publishing when ready."
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="[${VERSION}]" \
+            'index($0, "## " ver) == 1 { found=1; next } found && /^## \[/ { exit } found { print }' \
+            CHANGELOG.md > /tmp/release_body.md
+          echo "--- Release body ---"
+          cat /tmp/release_body.md
+          echo "--- End release body ---"
+
+      - name: Create GitHub Release
+        # DoD #7: body_path references the file produced in the step above,
+        # making the Release body == CHANGELOG [X.Y.Z] section (assertable equality).
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: /tmp/release_body.md
