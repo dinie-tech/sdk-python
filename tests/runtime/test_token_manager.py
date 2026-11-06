@@ -6,6 +6,7 @@ the network.
 
 from __future__ import annotations
 
+import base64
 import threading
 import time
 
@@ -45,6 +46,29 @@ class TestTokenManagerFetch:
             manager._http_client = client
             token = manager.token
         assert token == "tok-first"
+
+    def test_token_request_authenticates_with_http_basic_and_a_form_encoded_body(
+        self, httpx_mock: HTTPXMock
+    ) -> None:
+        httpx_mock.add_response(
+            url=f"{BASE_URL}{TOKEN_PATH}",
+            method="POST",
+            json=_token_response(),
+        )
+        with httpx.Client() as client:
+            manager = TokenManager(
+                client_id="the-id",
+                client_secret="the-secret",
+                base_url=BASE_URL,
+                http_client=client,
+            )
+            _ = manager.token
+
+        request = httpx_mock.get_requests()[0]
+        expected_credentials = base64.b64encode(b"the-id:the-secret").decode("ascii")
+        assert request.headers["Authorization"] == f"Basic {expected_credentials}"
+        assert request.headers["Content-Type"] == "application/x-www-form-urlencoded"
+        assert request.content == b"grant_type=client_credentials"
 
     def test_caches_token(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(

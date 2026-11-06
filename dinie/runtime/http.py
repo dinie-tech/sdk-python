@@ -53,7 +53,7 @@ from dinie.runtime.token_manager import TokenManager
 _HttpxClientT = TypeVar("_HttpxClientT", bound=httpx.Client)
 
 #: Default base URL (production).
-DEFAULT_BASE_URL = "https://api.dinie.com.br"
+DEFAULT_BASE_URL = "https://api.dinie.com/api/v3"
 
 #: Default number of automatic retries (not counting the initial attempt).
 DEFAULT_MAX_RETRIES = 2

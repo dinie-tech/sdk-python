@@ -13,7 +13,7 @@ from .resources.customers import Customers
 from .resources.loans import Loans
 from .resources.webhook_endpoints import WebhookEndpoints
 
-DEFAULT_BASE_URL = "https://api.dinie.com.br/api/v3"
+DEFAULT_BASE_URL = "https://api.dinie.com/api/v3"
 
 
 class Dinie:
