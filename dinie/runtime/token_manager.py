@@ -231,6 +231,9 @@ class TokenManager:
     def _fetch_client_credentials_token(self) -> tuple[str, int]:
         """POST ``/auth/token`` and return ``(access_token, expires_in)``.
 
+        The client credentials travel as HTTP Basic authentication and the body is
+        the form-encoded ``grant_type=client_credentials`` (RFC 6749 section 4.4).
+
         Returns:
             A ``(access_token, expires_in)`` tuple where ``expires_in`` is
             the lifetime in seconds (integer from the JSON body).
@@ -243,11 +246,8 @@ class TokenManager:
         url = f"{self._base_url}{TOKEN_PATH}"
         response = self._http_client.post(
             url,
-            json={
-                "grant_type": "client_credentials",
-                "client_id": self._client_id,
-                "client_secret": self._client_secret,
-            },
+            auth=(self._client_id, self._client_secret),
+            data={"grant_type": "client_credentials"},
         )
 
         if response.status_code >= 400:
