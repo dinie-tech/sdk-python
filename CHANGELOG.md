@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-06
+
+### Fixed
+
+- The client credentials request to `/auth/token` now uses HTTP Basic authentication with a
+  form-encoded `grant_type=client_credentials` body. It used to send a JSON body, which the API
+  rejects with `415`, so the SDK could never authenticate.
+- The default base URL is now `https://api.dinie.com/api/v3`. The previous default,
+  `https://api.dinie.com.br/api/v3`, does not resolve. The `DEFAULT_BASE_URL` exported by
+  `dinie.runtime` now carries the `/api/v3` prefix as well.
+
 ## [1.1.0] - 2026-06-13
 
 ## [1.0.0] - 2026-06-12
