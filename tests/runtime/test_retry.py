@@ -9,6 +9,7 @@ import pytest
 
 from dinie.runtime.retry import (
     RETRYABLE_STATUS,
+    is_idempotency_key_in_use,
     parse_retry_after,
     retry_delay,
     should_retry,
@@ -30,6 +31,21 @@ class TestShouldRetry:
 
     def test_retryable_status_set_exact(self) -> None:
         assert RETRYABLE_STATUS == frozenset({408, 429, 500, 502, 503, 504})
+
+
+class TestIsIdempotencyKeyInUse:
+    def test_409_with_the_idempotency_key_in_use_code(self) -> None:
+        assert is_idempotency_key_in_use(409, {"code": "idempotency_key_in_use"})
+
+    @pytest.mark.parametrize(
+        "body",
+        [{"code": "email_already_exists"}, {"detail": "conflict"}, "conflict", None],
+    )
+    def test_409_with_any_other_body_is_a_final_answer(self, body: object) -> None:
+        assert not is_idempotency_key_in_use(409, body)
+
+    def test_same_code_on_another_status_is_not_matched(self) -> None:
+        assert not is_idempotency_key_in_use(422, {"code": "idempotency_key_in_use"})
 
 
 class TestParseRetryAfter:

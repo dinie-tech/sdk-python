@@ -40,6 +40,15 @@ BASE_URL = "https://api.dinie.com.br"
 TOKEN_URL = f"{BASE_URL}{TOKEN_PATH}"
 API_URL = f"{BASE_URL}/v1/resource"
 
+_KEY_IN_USE_PROBLEM: dict[str, object] = {
+    "type": "https://docs.dinie.com/errors/conflict",
+    "title": "Conflict",
+    "status": 409,
+    "detail": "A request with this idempotency key is still running. Retry after it finishes.",
+    "code": "idempotency_key_in_use",
+    "request_id": "0b9f3c1e-6d2a-4c53-9a54-7e1b0f2f8a11",
+}
+
 
 def _token_response(token: str = "test-token", expires_in: int = 3600) -> dict[str, object]:
     return {"access_token": token, "expires_in": expires_in, "token_type": "Bearer"}
@@ -309,6 +318,74 @@ class TestRetryBehaviour:
 
         post_reqs = [r for r in httpx_mock.get_requests() if r.url.path == "/v1/resource"]
         assert len(post_reqs) == 1  # no retry
+
+    def test_409_idempotency_key_in_use_then_201_returns_replayed_response(
+        self, http_client: httpx.Client, httpx_mock: HTTPXMock
+    ) -> None:
+        """A 409 idempotency_key_in_use is retried with the same key after its Retry-After."""
+        client = _make_client(http_client, httpx_mock)
+        httpx_mock.add_response(
+            url=f"{BASE_URL}/v1/resource",
+            method="POST",
+            status_code=409,
+            headers={"Retry-After": "1"},
+            json=_KEY_IN_USE_PROBLEM,
+        )
+        httpx_mock.add_response(
+            url=f"{BASE_URL}/v1/resource",
+            method="POST",
+            status_code=201,
+            headers={"Idempotent-Replayed": "true"},
+            json={"id": "res_1"},
+        )
+
+        with patch("dinie.runtime.http.time.sleep") as sleep:
+            result = client.request("POST", "/v1/resource", body={})
+
+        assert result == {"id": "res_1"}
+        post_reqs = [r for r in httpx_mock.get_requests() if r.url.path == "/v1/resource"]
+        assert len(post_reqs) == 2
+        assert post_reqs[0].headers["idempotency-key"] == post_reqs[1].headers["idempotency-key"]
+        sleep.assert_called_once_with(1.0)
+
+    def test_409_idempotency_key_in_use_stops_at_the_retry_budget(
+        self, http_client: httpx.Client, httpx_mock: HTTPXMock
+    ) -> None:
+        client = _make_client(http_client, httpx_mock)
+        httpx_mock.add_response(
+            url=f"{BASE_URL}/v1/resource",
+            method="POST",
+            status_code=409,
+            headers={"Retry-After": "1"},
+            json=_KEY_IN_USE_PROBLEM,
+            is_reusable=True,
+        )
+
+        with patch("dinie.runtime.http.time.sleep") as sleep, pytest.raises(ConflictError):
+            client.request("POST", "/v1/resource", body={})
+
+        post_reqs = [r for r in httpx_mock.get_requests() if r.url.path == "/v1/resource"]
+        assert len(post_reqs) == 3
+        assert sleep.call_count == 2
+
+    def test_409_with_another_code_is_not_retried(
+        self, http_client: httpx.Client, httpx_mock: HTTPXMock
+    ) -> None:
+        client = _make_client(http_client, httpx_mock)
+        httpx_mock.add_response(
+            url=f"{BASE_URL}/v1/resource",
+            method="POST",
+            status_code=409,
+            headers={"Retry-After": "1"},
+            json={**_KEY_IN_USE_PROBLEM, "code": "email_already_exists"},
+        )
+
+        with patch("dinie.runtime.http.time.sleep") as sleep, pytest.raises(ConflictError):
+            client.request("POST", "/v1/resource", body={})
+
+        post_reqs = [r for r in httpx_mock.get_requests() if r.url.path == "/v1/resource"]
+        assert len(post_reqs) == 1
+        sleep.assert_not_called()
 
     def test_retry_after_120_capped_to_60(
         self, http_client: httpx.Client, httpx_mock: HTTPXMock
