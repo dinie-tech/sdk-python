@@ -13,10 +13,14 @@ from email.utils import parsedate_to_datetime
 #: HTTP status codes the SDK retries.
 #:
 #: Exactly ``{408, 429, 500, 502, 503, 504}``. 409 (Dinie semantic conflict) is
-#: intentionally excluded — it signals an idempotency-key reuse or a state-machine
-#: violation, not a transient failure. 401 is a one-shot re-auth handled separately
-#: in the transport, orthogonal to this set.
+#: excluded — it signals a state-machine violation or a duplicate, not a transient
+#: failure — except the ``idempotency_key_in_use`` one (``is_idempotency_key_in_use``).
+#: 401 is a one-shot re-auth handled separately in the transport, orthogonal to this set.
 RETRYABLE_STATUS: frozenset[int] = frozenset({408, 429, 500, 502, 503, 504})
+
+#: Problem ``code`` of the 409 sent while another request with the same idempotency
+#: key is still running.
+IDEMPOTENCY_KEY_IN_USE_CODE = "idempotency_key_in_use"
 
 #: Cap for ``Retry-After`` / ``Retry-After-Ms`` in seconds.
 #: Any server-supplied value above this is clamped to prevent abusive wait times.
@@ -42,6 +46,25 @@ def should_retry(status: int) -> bool:
         ``True`` when the status is in ``{408, 429, 500, 502, 503, 504}``.
     """
     return status in RETRYABLE_STATUS
+
+
+def is_idempotency_key_in_use(status: int, body: object) -> bool:
+    """Return ``True`` for the 409 sent while a request with the same key still runs.
+
+    It is retried like a ``429``: same idempotency key, after its ``Retry-After``.
+    Any other 409 is a final answer.
+
+    Args:
+        status: HTTP status code from the response.
+        body: Parsed response body (a Problem Details dict, text, or ``None``).
+
+    Returns:
+        ``True`` when ``status`` is 409 and the body's ``code`` is
+        ``idempotency_key_in_use``.
+    """
+    return (
+        status == 409 and isinstance(body, dict) and body.get("code") == IDEMPOTENCY_KEY_IN_USE_CODE
+    )
 
 
 def retry_delay(

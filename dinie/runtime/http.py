@@ -47,7 +47,7 @@ from dinie.runtime.models import serialize_request
 from dinie.runtime.multipart import MultipartBody
 from dinie.runtime.rate_limit import RateLimitTracker
 from dinie.runtime.request_options import RequestOptions
-from dinie.runtime.retry import retry_delay, should_retry
+from dinie.runtime.retry import is_idempotency_key_in_use, retry_delay, should_retry
 from dinie.runtime.token_manager import TokenManager
 
 _HttpxClientT = TypeVar("_HttpxClientT", bound=httpx.Client)
@@ -79,6 +79,14 @@ _PYTHON_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.versi
 _USER_AGENT = (
     f"Dinie-SDK-Python/{_SDK_VERSION} (api-version={_API_VERSION}; python/{_PYTHON_VERSION})"
 )
+
+
+def _error_body(response: httpx.Response) -> Any:
+    """Return the JSON body of an error response, else its text, else ``None``."""
+    try:
+        return response.json()
+    except Exception:
+        return response.text or None
 
 
 class BaseClient(Generic[_HttpxClientT]):
@@ -238,8 +246,11 @@ class BaseClient(Generic[_HttpxClientT]):
                 self._token_manager.invalidate()
                 continue  # retry immediately, no sleep, attempt counter unchanged
 
-            # Retryable status + budget remains → sleep and retry
-            if should_retry(status) and attempt < max_retries:
+            # Retryable status (or a 409 idempotency_key_in_use) + budget remains
+            # → sleep and retry
+            body_parsed = _error_body(response)
+            retryable = should_retry(status) or is_idempotency_key_in_use(status, body_parsed)
+            if retryable and attempt < max_retries:
                 delay = retry_delay(
                     attempt,
                     retry_after=response.headers.get("retry-after"),
@@ -249,11 +260,6 @@ class BaseClient(Generic[_HttpxClientT]):
                 continue
 
             # Non-retryable or budget exhausted → raise
-            try:
-                body_parsed: Any = response.json()
-            except Exception:
-                body_parsed = response.text or None
-
             raise from_response(
                 status=status,
                 body=body_parsed,
